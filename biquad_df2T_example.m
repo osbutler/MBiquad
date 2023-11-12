@@ -8,46 +8,40 @@ clc; close all; clearvars;
 % --------------------------
 % Author:  Oscar Butler
 % Project: MBiquad
-% Date:    11.4.2023
+% Date:    11.10.2023
 % --------------------------
     
 %% General settings
 fs = 48e3;
-BLOCKSIZE = 128; % Buffer size for ONE 32-bit floating point channel
+BLOCKSIZE = 16; % Buffer size for ONE 32-bit floating point channel
 
 %% Stimulus
-N = 2^12;
-fSine = 50;
+N = 256;
+Nfft = 2^14;
+fSine = 1000;
 t = 0:1/fs:(N-1)/fs;
-f = 0:fs/N:fs-1;
+f = 0:fs/Nfft:fs-1;
 x = sin(2*pi*fSine*t);
 
 %% Biquad parameters
-type = 4;           % Lowshelf filter type
-numStage = 1;       % Biquad order
-gaindB = 3;         % Gain in dB
-freqCut = 100.0;    % Significant frequency 
-Q = 0.707;          % Quality factor
+lowshelf_param.type = 1;           % Lowshelf filter type
+lowshelf_param.numStages = 1;       % Biquad order
+lowshelf_param.gaindB = 0;         % Gain in dB
+lowshelf_param.freqCut = 2500.0;    % Significant frequency 
+lowshelf_param.Q = 0.707;          % Quality factor
 
 %% Array init
-coeffLS = zeros(1,5);
-stateLS = zeros(1,4*numStage);
 inBuffer = zeros(1,BLOCKSIZE);
-outBuffer = zeros(1,BLOCKSIZE);
 
 %% Init of LS filter instance
-LS = biquad_Stereo_df2T;
-LS.init(numStage, coeffLS, stateLS, freqCut, Q, fs, gaindB, outBuffer, type);
-LS.biquad_coeff_calculation;
-H = freqz(LS.coeffs(1:3),[1 LS.coeffs(4:5)],f,fs);
+lowshelf = biquad_df2T(lowshelf_param, fs, BLOCKSIZE);
+H = freqz(lowshelf.coeffs(1:3),[1 lowshelf.coeffs(4:5)],f,fs);
 
 %% Block processing
-i = 1;
-while i < N/BLOCKSIZE
+for i=1:N/BLOCKSIZE-1
     inBuffer = x(i*BLOCKSIZE+1:(i+1)*BLOCKSIZE);
-    LS.mono_df2T(inBuffer, BLOCKSIZE);
-    y(i*BLOCKSIZE+1:(i+1)*BLOCKSIZE) = LS.outputBuffer;
-   i = i + 1; 
+    lowshelf.mono_df2T(inBuffer);
+    y(i*BLOCKSIZE+1:(i+1)*BLOCKSIZE) = lowshelf.outputBuffer;
 end
 
 
@@ -61,7 +55,7 @@ xlabel('Frequency [Hz]')
 ylabel('Magnitude [dB]')
 
 subplot(222)
-semilogx(f,angle(H));
+semilogx(f,180/pi*angle(H));
 grid on;
 xlim([10 20e3])
 xlabel('Frequency [Hz]')
@@ -76,8 +70,7 @@ xlabel('Samples')
 ylabel('Amplitude')
 xlim([0 N])
 
-
-
+sgtitle('Filter frequency response and in/out signals in time domain')
 
 
 

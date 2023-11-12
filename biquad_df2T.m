@@ -1,11 +1,12 @@
 classdef  biquad_df2T < handle
-% biquad_Stereo_df2T - Calculate 2n order biquad coefficient
-% filter (lowpass, highpass, bandpass, peak, lowshelf, highshelf). Process
-% data using the direct transform 2 transposed structure.
+% biquad_df2T - Initialize arrays and calculate 2nd order biquad coefficient
+% filter (lowpass, highpass, bandpass, peak, lowshelf, highshelf).
+% mono_df2T method allows you to process a mono signal by blocks of samples using the
+% direct transform 2 transposed biquad structure.
 % --------------------------
 % Author:  Oscar Butler
 % Project: MBiquad
-% Date:    11.4.2023
+% Date:    11.10.2023
 % --------------------------
     
 %% Properties 
@@ -18,60 +19,27 @@ classdef  biquad_df2T < handle
         fs          % Sampling frequency
         gaindB      % Gain in dB 
         type        % Filter type
+        blocksize   % Buffer size
         outputBuffer% Buffer where filtered samples are stored
     end
+%% Methods
     methods 
-        function obj = init(obj,numStages, coeffs, state, freqCut, Q, fs, gaindB, outputBuffer, type)
-          obj.numStages = numStages;
-          obj.coeffs = coeffs;
-          obj.state = state;
-          obj.f0 = freqCut;
-          obj.Q = Q;
-          obj.fs = fs;
-          obj.gaindB = gaindB;
-          obj.outputBuffer = outputBuffer;
-          obj.type = type;
+        function obj = biquad_df2T(filter_param, fs, blocksize) % Constructor
+            obj.init(filter_param, fs, blocksize);
+            obj.biquad_coeff_calculation;
         end
         
-        function obj = mono_df2T(obj, inputBuffer, blockSize)
-            % Load coefficients
-            b0 = obj.coeffs(1);
-            b1 = obj.coeffs(2);
-            b2 = obj.coeffs(3);
-            a1 = obj.coeffs(4);
-            a2 = obj.coeffs(5);
-
-            % Load state variables
-            d1L = obj.state(1);
-            d2L = obj.state(2);
-            d1R = obj.state(3);
-            d2R = obj.state(4);
-
-            stage = obj.numStages;
-
-            while stage > 0
-                for i=1:blockSize
-                inSample = inputBuffer(i);
-
-                outSample = b0 * inSample + d1R;
-                d1R = b1 * inSample - a1 * outSample + d2R;
-                d2R = b2 * inSample - a2 * outSample;
-
-                obj.outputBuffer(i) = outSample;
-
-                end
-
-                % Save new state variable by incrementing state pointer
-                obj.state(1) = d1L;
-                obj.state(2) = d2L;
-                obj.state(3) = d1R;
-                obj.state(4) = d2R;
-
-                % The current stage input is given as the output to the next stage
-                inputBuffer = obj.outputBuffer;
-
-                stage = stage - 1;
-            end
+        function obj = init(obj, filter_param, fs, blocksize)
+          obj.type = filter_param.type;
+          obj.numStages = filter_param.numStages;
+          obj.coeffs = zeros(1,2*obj.numStages);
+          obj.state = zeros(1,2*obj.numStages);
+          obj.f0 = filter_param.freqCut;
+          obj.Q = filter_param.Q;
+          obj.fs = fs;
+          obj.gaindB = filter_param.gaindB;
+          obj.blocksize = blocksize;
+          obj.outputBuffer = zeros(1,2*obj.numStages);
         end
         
         function obj = biquad_coeff_calculation(obj)
@@ -140,13 +108,48 @@ classdef  biquad_df2T < handle
             a1 = a1/a0;
             a2 = a2/a0;
 
-            coeffs(1) = b0;
-            coeffs(2) = b1;
-            coeffs(3) = b2;
-            coeffs(4) = a1;
-            coeffs(5) = a2;
+            obj.coeffs(1) = b0;
+            obj.coeffs(2) = b1;
+            obj.coeffs(3) = b2;
+            obj.coeffs(4) = a1;
+            obj.coeffs(5) = a2;
+        end
+        
+        function obj = mono_df2T(obj, inputBuffer)
+            % Load coefficients
+            b0 = obj.coeffs(1);
+            b1 = obj.coeffs(2);
+            b2 = obj.coeffs(3);
+            a1 = obj.coeffs(4);
+            a2 = obj.coeffs(5);
             
-            obj.coeffs = coeffs;
+            % Load state variables
+            d1 = obj.state(1);
+            d2 = obj.state(2);
+            
+            stage = obj.numStages;
+            
+            while stage > 0
+                for i=1:obj.blocksize
+                    inSample = inputBuffer(i);
+                    
+                    outSample = b0 * inSample + d1;
+                    d1 = b1 * inSample - a1 * outSample + d2;
+                    d2 = b2 * inSample - a2 * outSample;
+                    
+                    obj.outputBuffer(i) = outSample;
+                    
+                end
+                
+                % Save new state variable by incrementing state pointer
+                obj.state(1) = d1;
+                obj.state(2) = d2;
+                
+                % The current stage input is given as the output to the next stage
+                inputBuffer = obj.outputBuffer;
+                
+                stage = stage - 1;
+            end
         end
     end
 end
